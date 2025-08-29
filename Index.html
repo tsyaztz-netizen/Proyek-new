@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Konfirmasi Lokasi</title>
+  <meta name="theme-color" content="#ffffff" />
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 560px; margin: 40px auto; line-height: 1.5; }
+    .card { border: 1px solid #ddd; border-radius: 10px; padding: 18px; }
+    button { font-size: 16px; padding: 10px 14px; border-radius: 8px; border: 1px solid #ccc; cursor: pointer; }
+    .ok { color: #0a7a2e; }
+    .err { color: #b00020; }
+    .muted { color: #666; font-size: 14px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <h1>Konfirmasi Lokasi</h1>
+  <div class="card">
+    <p>Untuk verifikasi, situs ini memerlukan akses lokasi Anda.</p>
+    <p class="muted">Tekan <strong>Izinkan</strong> saat diminta. Nyalakan GPS/Location pada perangkat Anda.</p>
+    <button id="btn">Izinkan & Ambil Lokasi</button>
+    <p id="status" class="muted"></p>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const resultEl = document.getElementById('result');
+    const btn = document.getElementById('btn');
+
+    function showStatus(msg, cls) {
+      statusEl.textContent = msg;
+      statusEl.className = cls || 'muted';
+    }
+
+    function showResult(coords) {
+      const { latitude, longitude, accuracy, altitude, heading, speed } = coords;
+      const maps = `https://maps.google.com/?q=${latitude},${longitude}`;
+      resultEl.innerHTML = `
+        <p class="ok"><strong>Lokasi diperoleh.</strong></p>
+        <ul>
+          <li>Latitude: <span class="mono">${latitude}</span></li>
+          <li>Longitude: <span class="mono">${longitude}</span></li>
+          <li>Akurasi (m): <span class="mono">${accuracy}</span></li>
+          ${altitude!=null ? `<li>Altitude (m): <span class="mono">${altitude}</span></li>` : ''}
+          ${heading!=null ? `<li>Arah (deg): <span class="mono">${heading}</span></li>` : ''}
+          ${speed!=null ? `<li>Kecepatan (m/s): <span class="mono">${speed}</span></li>` : ''}
+        </ul>
+        <p><a href="${maps}" target="_blank" rel="noopener">Buka di Google Maps</a></p>
+      `;
+    }
+
+    async function sendToServer(payload) {
+      try {
+        const res = await fetch('/api/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Gagal kirim ke server');
+        showStatus('Data lokasi sudah dikirim.', 'ok');
+      } catch (e) {
+        showStatus('Gagal kirim data: ' + e.message, 'err');
+      }
+    }
+
+    function getAndSendLocation() {
+      if (!('geolocation' in navigator)) {
+        showStatus('Perangkat tidak mendukung Geolocation.', 'err');
+        return;
+      }
+      showStatus('Meminta izin lokasi…');
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const { latitude, longitude, accuracy, altitude, heading, speed } = pos.coords;
+        showResult(pos.coords);
+        const payload = {
+          latitude, longitude, accuracy, altitude, heading, speed,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent
+        };
+        await sendToServer(payload);
+      }, (err) => {
+        let tip = '';
+        if (err.code === err.PERMISSION_DENIED) tip = ' Izin ditolak. Aktifkan izin lokasi untuk browser.';
+        if (err.code === err.POSITION_UNAVAILABLE) tip = ' Sinyal GPS lemah. Coba ke area terbuka.';
+        if (err.code === err.TIMEOUT) tip = ' Waktu habis. Coba lagi.';
+        showStatus('Gagal mendapatkan lokasi: ' + err.message + tip, 'err');
+      }, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      });
+    }
+
+    // tombol manual (beberapa browser butuh gesture user)
+    btn.addEventListener('click', getAndSendLocation);
+
+    // juga coba otomatis saat halaman terbuka
+    // (di Android kadang butuh klik tombol; tetap menyediakan keduanya)
+    document.addEventListener('DOMContentLoaded', () => {
+      // getAndSendLocation();
+    });
+  </script>
+</body>
+</html>
