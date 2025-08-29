@@ -1,0 +1,6 @@
+my-geolog/
+├─ public/
+│  └─ index.html
+├─ api/
+│  └─ report.js
+└─ package.json
